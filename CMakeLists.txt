@@ -3,4 +3,4 @@ project(MasterMInd)
 
 set(CMAKE_CXX_STANDARD 14)
 
-add_executable(MasterMInd main.cpp)
+add_executable(MasterMInd main.cpp MasterMind.cpp MasterMind.h lib_perso.cpp lib_perso.h)
