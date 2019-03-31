@@ -6,31 +6,31 @@
 #include <memory>
 #include <math.h>
 #include <vector>
-#include "lib_perso.h"
+#include <array>
 #include "MasterMind.h"
-#define N 2000
+#include "lib_perso.h"
+
 
 using namespace std;
 
-template
-class std::unique_ptr<int[]>;
-
-
-
-void all_alphanum(vector<unique_ptr<int[]>> &v, unsigned long n_psol, int n_pins, int n_couleurs) {
-    auto next_coup = make_unique<int[]>(n_pins);
-    initialize(next_coup, n_pins);
-    for (int i = 0; i < n_psol; i++) {
-        v[i].reset(new int[n_pins]);
-        copy_array(next_coup, v[i], n_pins);
-        next_alphanum(next_coup, n_couleurs, n_pins);
+template<size_t size>
+void all_alphanum(vector<array<int, size>> &v, int n_couleurs)
+{
+    array<int, size> next_coup{0};
+    for (int i = 0; i < v.size(); i++)
+    {
+        v[i] = next_coup;
+        next_alphanum<size>(next_coup, n_couleurs);
     }
 }
 
-bool check_sol(const MasterMind &game, const unique_ptr<int[]> &test_sol) {
-    MasterMind test_game(test_sol, game.n_coups, game.n_pins, game.n_coups_max);
+template<size_t n_pins, size_t n_colors>
+bool check_sol(const MasterMind<n_pins, n_colors> &game, const array<int, n_pins> &test_sol)
+{
+    MasterMind<n_pins, n_colors> test_game(test_sol, game.n_coups_max);
 
-    for (int c = 0; c < game.n_coups; c++) {
+    for (int c = 0; c < game.tab_coups.size(); c++)
+    {
         test_game.play(game.tab_coups[c]);
         if ((test_game.tab_noirs[c] != game.tab_noirs[c]) || (test_game.tab_blancs[c] != game.tab_blancs[c]))
             return false;
@@ -38,12 +38,16 @@ bool check_sol(const MasterMind &game, const unique_ptr<int[]> &test_sol) {
     return true;
 }
 
-int solve_random(MasterMind &game) {
+template<size_t n_pins, size_t n_colors>
+int solve_random(MasterMind<n_pins, n_colors> &game)
+{
     auto next_coup = make_unique<int[]>(game.n_pins);
     initialize(next_coup, game.n_pins);
-    while (!game.play(next_coup)) {
+    while (!game.play(next_coup))
+    {
         initialize_random(next_coup, game.n_couleurs, game.n_pins);
-        while (!check_sol(game, next_coup)) {
+        while (!check_sol(game, next_coup))
+        {
             initialize_random(next_coup, game.n_couleurs, game.n_pins);
         }
         //cout << game << endl;
@@ -51,38 +55,49 @@ int solve_random(MasterMind &game) {
     return game.n_coups;
 }
 
-float moyenne(const int *tab, int t) {
+float moyenne(const int *tab, int t)
+{
     float s = 0;
-    for (int i = 0; i < t; i++) {
+    for (int i = 0; i < t; i++)
+    {
         s += tab[i];
     }
     return s / t;
 }
 
-double valeur_situation(MasterMind &g, vector<unique_ptr<int[]>> &coups_possible) {
+template<size_t n_pins, size_t n_colors>
+double valeur_situation(MasterMind<n_pins, n_colors> &g, vector<array<int, n_pins>> &coups_possible)
+{
     int val = 0;
     for (int i = 0; i < coups_possible.size(); i++) if (check_sol(g, coups_possible[i])) val++;
     return ((double) val) / coups_possible.size();
 }
 
 
-double valeur_situation(MasterMind &g, int prec, vector<unique_ptr<int[]>> &coups_possible, int n_sol_left) {
-    if (prec > n_sol_left) return valeur_situation(g, coups_possible);
+template<size_t n_pins, size_t n_colors>
+double
+valeur_situation(MasterMind<n_pins, n_colors> &g, int prec, vector<array<int, n_pins>> &coups_possible)
+{
+    if (prec > coups_possible.size()) return valeur_situation(g, coups_possible);
     int val = 0;
-    for (int i = 0; i < prec; i++) {
-        if (check_sol(g, coups_possible[rand() % n_sol_left])) val++;
+    for (int i = 0; i < prec; i++)
+    {
+        if (check_sol(g, coups_possible[rand() % coups_possible.size()])) val++;
     }
     return ((double) val) / prec;
 }
 
 
-double valeur_situation(MasterMind &g, int prec) {
+template<size_t n_pins, size_t n_colors>
+double valeur_situation(MasterMind<n_pins, n_colors> &g, int prec)
+{
     int val = 0;
-    unique_ptr<int[]> psol = make_unique<int[]>(g.n_pins);
-    initialize_random(psol, g.n_couleurs, g.n_pins);
-    for (int i = 0; i < prec; i++) {
+    array<int, n_pins> psol;
+    initialize_random<n_pins>(psol, g.n_couleurs);
+    for (int i = 0; i < prec; i++)
+    {
         g.n_coups--;
-        while (!check_sol(g, psol)) initialize_random(psol, g.n_couleurs, g.n_pins);
+        while (!check_sol<n_pins, n_colors>(g, psol)) initialize_random(psol, g.n_couleurs, g.n_pins);
         g.n_coups++;
         //cout << i << endl;
         if (check_sol(g, psol)) val++;
@@ -91,43 +106,51 @@ double valeur_situation(MasterMind &g, int prec) {
     return ((double) val) / prec;
 }
 
-double valeur_coup(MasterMind &g, unique_ptr<int[]> &coup, vector<unique_ptr<int[]>> &coups_possible) {
+template<size_t n_pins, size_t n_colors>
+double
+valeur_coup(MasterMind<n_pins, n_colors> &g, array<int, n_pins> &coup, vector<array<int, n_pins>> &coups_possible)
+{
     double val = 0;
-    auto rsol = make_unique<int[]>(g.n_pins);
-    MasterMind ng(g);
-    copy_array(coups_possible[0], rsol, g.n_pins);
+    array<int, n_pins> rsol = coups_possible[0];
+    MasterMind<n_pins, n_colors> ng(g);
     ng.change_sol(rsol);
     ng.play(coup);
-    val += valeur_situation(ng, coups_possible);
+    val += valeur_situation<n_pins, n_colors>(ng, coups_possible);
 
-    for (int i = 1; i < coups_possible.size(); i++) {
-        copy_array(coups_possible[i], rsol, g.n_pins);
+    for (int i = 1; i < coups_possible.size(); i++)
+    {
+        rsol = coups_possible[i];
         ng.change_sol(rsol);
-        ng.n_coups--;
+        ng.unplay_last_coup();
         ng.play(coup);
         val += valeur_situation(ng, coups_possible);
     }
     return val / coups_possible.size();
 }
 
-double valeur_coup(MasterMind &g, unique_ptr<int[]> &coup, int prec,
-                   vector<unique_ptr<int[]>> &coups_possible, unsigned long n_sol_left) {
+
+template<size_t n_pins, size_t n_colors>
+double valeur_coup(MasterMind<n_pins, n_colors> &g, unique_ptr<int[]> &coup, int prec,
+                   vector<unique_ptr<int[]>> &coups_possible)
+{
     double val = 0;
     auto rsol = make_unique<int[]>(g.n_pins);
-    copy_array(coups_possible[rand() % n_sol_left], rsol, g.n_pins);
-    MasterMind ng(g);
+    copy_array(coups_possible[rand() % coups_possible.size()], rsol, g.n_pins);
+    MasterMind<n_pins, n_colors> ng(g);
     ng.change_sol(rsol);
     ng.play(coup);
 
-    for (int i = 0; i < prec; i++) {
-        val += valeur_situation(ng, prec / 2, coups_possible, n_sol_left);
+    for (int i = 0; i < prec; i++)
+    {
+        val += valeur_situation(ng, prec / 2, coups_possible, coups_possible.size());
         //cout << val << endl;
-        copy_array(coups_possible[rand() % n_sol_left], rsol, g.n_pins);
+        rsol = coups_possible[rand() % coups_possible.size()];
         ng.change_sol(rsol);
-        ng.n_coups--;
+        ng.tab_coups.pop_back();
         ng.play(coup);
     }
-    if (val / prec == 0) {
+    if (val / prec == 0)
+    {
         cout << g << endl;
         output_tabb(cout, coup, g.n_pins);
         cout << endl;
@@ -137,15 +160,19 @@ double valeur_coup(MasterMind &g, unique_ptr<int[]> &coup, int prec,
     return val / prec;
 }
 
-double valeur_coup(MasterMind &g, unique_ptr<int[]> &coup, int prec) {
+
+template<size_t n_pins, size_t n_colors>
+double valeur_coup(MasterMind<n_pins, n_colors> &g, unique_ptr<int[]> &coup, int prec)
+{
     double val = 0;
     auto rsol = make_unique<int[]>(g.n_pins);
     while (!check_sol(g, rsol)) initialize_random(rsol, g.n_couleurs, g.n_pins);
-    MasterMind ng(g);
+    MasterMind<n_pins, n_colors> ng(g);
     ng.change_sol(rsol);
     ng.play(coup);
 
-    for (int i = 0; i < prec; i++) {
+    for (int i = 0; i < prec; i++)
+    {
         val += valeur_situation(ng, prec / 2);
         //cout << val << endl;
         while (!check_sol(g, rsol)) initialize_random(rsol, g.n_couleurs, g.n_pins);
@@ -164,41 +191,49 @@ double valeur_coup(MasterMind &g, unique_ptr<int[]> &coup, int prec) {
 }
 
 
-int solve_opti(MasterMind &g, int prec) {
-    unsigned long n_psol = fpow(g.n_couleurs, g.n_pins);
-    unsigned long n_sol_left = n_psol;
+template<size_t n_pins, size_t n_colors>
+int solve_opti(MasterMind<n_pins, n_colors> &g, int prec)
+{
+    unsigned long n_psol = fpow(n_colors, n_pins);
     double v_best_coup;
     double v_coup;
 
-    vector<unique_ptr<int[]>> coups_possibles(n_psol);
-    all_alphanum(coups_possibles, n_psol, g.n_pins, g.n_couleurs);
+    vector<array<int, n_pins>> coups_possibles(n_psol, {0});
+    all_alphanum<n_pins>(coups_possibles, n_colors);
 
-    auto next_coup = make_unique<int[]>(g.n_pins);
-    initialize(next_coup, g.n_pins);
+    array<int, n_pins> next_coup({0});
 
-    while (!g.won) {
+    array<int, n_pins> first_coup{0};
+    for (int i = 0; i < n_pins; i++) first_coup[i] = i % n_colors;
+    //g.play({0, 0, 2});
+    while (!g.won)
+    {
         v_best_coup = 2;
-        for (unsigned long i = n_sol_left - 1; i >= 0 && i < n_sol_left; i--) {
+        for (unsigned long i = coups_possibles.size() - 1; i >= 0 && i <= coups_possibles.size() + 10; i--)
+        {
+            if (i == coups_possibles.size()) i--;
             /*cout << "tested coup : ";
             output_tabb(cout, coups_possibles[i], g.n_pins);
             cout << endl;
             cout << "current best coup : " ;
             output_tabb(cout, next_coup, g.n_pins);
-            cout << endl;*/
-            cout << i << " / " << n_sol_left << " / ";
-            output_tabb(cout, coups_possibles[i], g.n_pins);
             cout << endl;
-            if (check_sol(g, coups_possibles[i])) {
+            cout << i << " / " << coups_possibles.size() << " / ";
+            output_tabb<n_pins>(cout, coups_possibles[i]);
+            cout << endl;*/
+            if (check_sol(g, coups_possibles[i]))
+            {
                 v_coup = valeur_coup(g, coups_possibles[i], coups_possibles);
                 /*cout << "vcoup : " << v_coup << endl;
-                cout << "v_best_coup : " << v_best_coup << endl << endl;*/ 
-                if (v_coup < v_best_coup) {
+                cout << "v_best_coup : " << v_best_coup << endl << endl;*/
+                if (v_coup < v_best_coup)
+                {
                     v_best_coup = v_coup;
-                    copy_array(coups_possibles[i], next_coup, g.n_pins);
+                    next_coup = coups_possibles[i];
                 }
-            } else {
+            } else
+            {
                 coups_possibles.erase(coups_possibles.begin() + i);
-                n_sol_left -= 1;
             }
             /*for (int j=0; j<n_sol_left; j++){
                 output_tabb(cout, coups_possibles[i], g.n_pins);
@@ -211,31 +246,31 @@ int solve_opti(MasterMind &g, int prec) {
         g.play(next_coup);
         cout << g << endl;
     }
-    return g.n_coups;
+    return g.tab_coups.size();
 }
 
-double eval_strat(int it) {
+template<size_t n_pins, size_t n_colors>
+double eval_strat(int it)
+{
     int *val = new int[it];
-    MasterMind g(8, 4, 25);
+    MasterMind<n_pins, n_colors> g(25);
 
-    unique_ptr<int[]> coup = make_unique<int[]>(4);
-    for (int i = 0; i < it; i++) {
-        g = MasterMind(8, 4, 25);
+    for (int i = 0; i < it; i++)
+    {
+        g = MasterMind<n_pins, n_colors>(25);
         val[i] = solve_opti(g, it);
     }
     return moyenne(val, it);
 }
 
-int main() {
+int main()
+{
     srand(time(NULL));
-    unique_ptr<int[]> sol = make_unique<int[]>(3);
-    unique_ptr<int[]> coup = make_unique<int[]>(4);
-    sol.reset(new int[5]{0, 0, 0, 0, 0});
-    coup.reset(new int[5]{0, 1, 2, 3, 0});
-    MasterMind g(sol, 4, 4, 25);
-    g.play(coup);
-    solve_opti(g, 1000);
-    cout << g << endl;
+    //array<int, 2> sol{0};
+    //initialize_random<2>(sol, 4);
+    //MasterMind<4, 2> g(25);
+    //solve_opti(g, 1000);
+    //cout << g << endl;
     //g.play(coup);
     //coup.reset(new int[4]{2, 1, 0});
 
@@ -245,6 +280,6 @@ int main() {
     //ng.play(coup);
     //cout << ng << endl;
     //cout << valeur_coup(ng, coup, 1000) << endl;
-    //cout << eval_strat(1000) << endl;
+    cout << eval_strat<3, 3>(500) << endl;
     return 0;
 }
